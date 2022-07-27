@@ -28,7 +28,7 @@ try:
 except ImportError:
     humanfriendly = None
 
-__version__ = "0.3.1"
+__version__ = "0.3"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -682,6 +682,12 @@ def main():
     parser = argparse.ArgumentParser(
         prog="docker-export",
         description="Docker Registry HTTP API V2 based Image extractor",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+    docker-export --platform linux/arm64 kiwix/kiwix-tools:3.3.0 kiwix-tools.tar
+    docker-export alpine alpine.tar
+
+See https://docs.docker.com/desktop/multi-arch/ for platforms list"""
     )
 
     parser.add_argument("-V", "--version", action="version", version=__version__)
@@ -695,28 +701,28 @@ def main():
 
     parser.add_argument(
         help="path to write exported image to. If it doesn't end in .tar, "
-        "it is expected to be a folder to write the image into.",
+        "it is expected to be a folder to write the image into",
         dest="output",
     )
 
     parser.add_argument(
         "--registry",
-        help="registry to pull image from"
-        "Defaults to registry definition in {image} or `docker.io`.",
+        help="registry to pull image from. "
+        "Defaults to registry definition in {image} or `docker.io`",
         dest="registry",
     )
 
     parser.add_argument(
         "--repository",
         help="repository to pull image from. "
-        "Defaults to repository definition in {image} or `library`.",
+        "Defaults to repository definition in {image} or `library`",
         dest="repository",
     )
 
     parser.add_argument(
         "--tag",
         help="tag version of image to pull. "
-        "Defaults to tag definition in {image} or `latest`.",
+        "Defaults to tag definition in {image} or `latest`",
         dest="tag",
     )
 
@@ -726,8 +732,10 @@ def main():
 
     parser.add_argument(
         "--platform",
-        help="Platform to download image for",
-        default="linux/arm/v7",
+        help="Platform to download image for. "
+        f"Defaults to `{Platform.auto()}` (guessed). "
+        "Ex: linux/amd64, linux/arm/v6, linux/arm/v7, linux/arm64, windows/amd64",
+        default="auto",
         dest="platform",
     )
 
