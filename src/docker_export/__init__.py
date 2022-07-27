@@ -28,7 +28,7 @@ try:
 except ImportError:
     humanfriendly = None
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
@@ -85,7 +85,7 @@ class Platform:
     os: str
     variant: str
 
-    def __str__(self):
+    def __repr__(self):
         value = f"{self.os}/{self.architecture}"
         if self.variant:
             value += f"/{self.variant}"
@@ -155,6 +155,14 @@ class Platform:
         elif machine.startswith("i686") or machine.startswith("i386"):
             return cls.parse("linux/i386")
         return cls.parse("linux/amd64")
+
+    @classmethod
+    def from_payload(cls, payload: Dict[str, str]):
+        return cls(
+            architecture=payload.get("architecture"),
+            os=payload.get("os"),
+            variant=payload.get("variant"),
+        )
 
     def match(self, payload: Dict[str, str]) -> bool:
         if self.variant and self.variant != payload.get("variant"):
@@ -336,7 +344,10 @@ def get_layers_from_v1_manifest(
     os = manifest.get("os", "linux")
 
     if not platform.match({"architecture": architecture, "os": os}):
-        raise ValueError(f"{image} is v1 single platform and mismatches")
+        raise ValueError(
+            f"Requested platform ({platform}) is not available "
+            f"for single-platform image {image}"
+        )
 
     return {
         "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
@@ -373,7 +384,10 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
     # image is single-platform, thus considered linux/amd64
     if "layers" in fat_manifests:
         if platform != platform.default():
-            raise ValueError(f"{image} is single platform and mismatches")
+            raise ValueError(
+                f"Requested platform ({platform}) is not available "
+                f"for v1 manifest (considered {platform.default()}) for image {image}"
+            )
         manifest = fat_manifests
     else:
         # multi-platform image
@@ -382,16 +396,20 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
                 manifest = get_layers_manifest_for(image, auth, arch_manifest["digest"])
 
         if not manifest:
+            platforms = [
+                Platform.from_payload(man.get("platform"))
+                for man in fat_manifests.get("manifests", [])
+            ]
             raise ValueError(
-                f"Unable to find a manifest for this reference "
-                f"and platform: {image} | {platform}"
+                f"Requested platform ({platform}) is not available "
+                f"for image {image}. "
+                f"Available platforms: {', '.join([str(p) for p in platforms])}"
             )
 
     logger.debug(f"layers_manifest={format_json(manifest)}")
     if not manifest.get("layers"):
         raise ValueError(
-            "Unable to find layers for this reference "
-            f"and platform: {image} | {platform}"
+            f"Layers missing for requested platform ({platform}) for image {image}."
         )
     return manifest
 
@@ -734,8 +752,9 @@ def main():
         export(image=image, platform=platform, to=dest, build_dir=build_dir)
         sys.exit(0)
     except Exception as exc:
-        logger.error(f"FAILED. An error occurred: {exc}")
-        logger.exception(exc)
+        logger.error(str(exc))
+        if args.get("debug"):
+            logger.exception(exc)
         raise SystemExit(1)
 
 
