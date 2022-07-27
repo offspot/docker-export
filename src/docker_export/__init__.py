@@ -204,6 +204,14 @@ class Image:
     def reference(self):
         return self.digest or self.tag
 
+    @property
+    def url(self):
+        domain = (
+            "hub.docker.com" if self.registry == "index.docker.io" else self.registry
+        )
+        prefix = "r/" if self.registry == "index.docker.io" else ""
+        return f"https://{domain}/{prefix}/{self.fullname}"
+
     @classmethod
     def parse(
         cls,
@@ -315,6 +323,17 @@ def get_manifests(image, auth):
             **{"Accept": "application/vnd.docker.distribution.manifest.list.v2+json"},
         ),
     )
+    if resp.status_code == 401:
+        raise IOError(
+            f"HTTP {resp.status_code}: {resp.reason} -- "
+            "This **may** indicate an incorrect image name/registry/repo/tag.\n"
+            f"Check {image.url}"
+        )
+    if resp.status_code == 404:
+        raise ValueError(
+            f"HTTP {resp.status_code}: {resp.reason} -- "
+            f"Image name is probably incorrect.\nCheck {image.url}"
+        )
     if resp.status_code != 200:
         raise IOError(f"HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
 
@@ -687,7 +706,7 @@ def main():
     docker-export --platform linux/arm64 kiwix/kiwix-tools:3.3.0 kiwix-tools.tar
     docker-export alpine alpine.tar
 
-See https://docs.docker.com/desktop/multi-arch/ for platforms list"""
+See https://docs.docker.com/desktop/multi-arch/ for platforms list""",
     )
 
     parser.add_argument("-V", "--version", action="version", version=__version__)
