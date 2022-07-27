@@ -52,3 +52,11 @@ export(
     to=pathlib.Path("kiwix-tools.tar"),
 )
 ```
+
+### Load image
+
+To (re)load the image tarball to Docker image repository:
+
+```bash
+docker load < your_image.tar
+```
