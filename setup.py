@@ -3,6 +3,8 @@
 # vim: ai ts=4 sts=4 et sw=4 nu
 
 import pathlib
+import subprocess
+import sys
 
 from setuptools import find_packages, setup
 
@@ -14,9 +16,22 @@ def read(*names, **kwargs):
         return fh.read()
 
 
+def get_version():
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from docker_export import __version__; print(__version__)",
+        ],
+        env={"PYTHONPATH": root_dir.joinpath("src")},
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
+
+
 setup(
     name="docker_export",
-    version=read("src", "VERSION").strip(),
+    version=get_version(),
     description="Export docker image into tar file directly from registry API",
     long_description=read("README.md"),
     long_description_content_type="text/markdown",
@@ -54,5 +69,5 @@ setup(
         "Programming Language :: Python :: 3.10",
         "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.9",
 )

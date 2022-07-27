@@ -28,6 +28,7 @@ try:
 except ImportError:
     humanfriendly = None
 
+__version__ = "0.3.1"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -682,6 +683,8 @@ def main():
         prog="docker-export",
         description="Docker Registry HTTP API V2 based Image extractor",
     )
+
+    parser.add_argument("-V", "--version", action="version", version=__version__)
 
     parser.add_argument(
         help="name of image to pull. Can optionnaly include registry, repository "
