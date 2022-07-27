@@ -635,6 +635,10 @@ def export(
          into while fetching."""
 
     logger.info(f"Starting {image} ({platform}) export into {to}")
+    # make sure destination and build-dir exists
+    to.parent.mkdir(parents=True, exist_ok=True)
+    if build_dir:
+        build_dir.mkdir(parents=True, exist_ok=True)
 
     auth = RegistryAuth.init(image)
     auth.authenticate()
