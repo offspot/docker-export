@@ -1,0 +1,29 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## Added
+
+- `--version` parameter
+
+### Changed
+
+- Improved `--help` usage
+- More actionnable error message on incorrect image ref
+- Fail on unsupported manifest instead of creating invalid tarball
+
+## [0.2] – 2022-07-27
+
+## Changed
+
+- Destination folder created if non-existent
+- Better error messages
+
+## [0.1] – 2022-07-19
+
+- initial release
