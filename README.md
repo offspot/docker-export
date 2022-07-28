@@ -4,8 +4,8 @@
 [![CodeFactor](https://www.codefactor.io/repository/github/offspot/docker-export/badge)](https://www.codefactor.io/repository/github/offspot/docker-export)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-Export Docker Images to a single `.tar` without `docker`: Using Python
-and the registry's API.
+Export Docker Images (**v2 manifests only**) to a single `.tar`, without `docker`;
+Using Python and the registry's API.
 
 ## Usages
 
@@ -51,4 +51,15 @@ export(
     platform=Platform.auto(),
     to=pathlib.Path("kiwix-tools.tar"),
 )
+```
+
+### Using exported image
+
+Exported images (tarball) are loaded into dockerd via:
+
+```sh
+docker load -i IMAGE.tar
+
+# verify it's been properly added
+docker images
 ```
