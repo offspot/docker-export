@@ -615,10 +615,21 @@ def export_layers(
 
     # write image digest
     digest = manifest["config"]["digest"]
-    config = requests.get(
+    logger.debug(f"{digest=}")
+    resp = requests.get(
         f"https://{image.registry}/v2/{image.fullname}/blobs/{digest}",
         headers=auth.headers,
-    ).content
+    )
+    if resp.status_code == 404:
+        logger.error(
+            "Unsupported manifest schema/version: digest blob not found\n\n"
+            "###############\n"
+            "Use regctl instead https://github.com/regclient/regclient\n"
+            f"regctl image export {image} {target}\n"
+            "###############\n"
+        )
+    resp.raise_for_status()
+    config = resp.content
 
     new_manifest = [
         {
