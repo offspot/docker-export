@@ -28,10 +28,49 @@ try:
 except ImportError:
     humanfriendly = None
 
-__version__ = "0.3"
+__version__ = "0.4"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+class ImageNotFound(Exception):
+    ...
+
+
+class V2ImageNotFound(ImageNotFound):
+    def __init__(self, image, platform, platforms=None):
+        self.image = image
+        self.platform = platform
+        self.platforms = platforms or []
+
+        super().__init__(
+            f"Requested platform ({platform}) is not available "
+            f"for image {image}. "
+            f"Available platforms: {', '.join([str(p) for p in self.platforms])}",
+        )
+
+
+class V1ImageNotFound(ImageNotFound):
+    def __init__(self, image, platform):
+        self.image = image
+        self.platform = platform
+        self.platforms = []
+
+        super().__init__(
+            f"Requested platform ({platform}) is not available "
+            f"for v1 manifest (considered {platform.default()}) for image {image}"
+        )
+
+
+class LayersNotFound(Exception):
+    def __init__(self, image, platform):
+        self.image = image
+        self.platform = platform
+        super().__init__(
+            self,
+            f"Layers missing for requested platform ({platform}) for image {image}.",
+        )
 
 
 def format_size(size: int) -> str:
@@ -145,6 +184,10 @@ class Platform:
         return cls.parse("linux/amd64")
 
     @classmethod
+    def default_variant(cls, architecture):
+        return {"arm64": "v8", "arm32": "v7"}.get(architecture, "")
+
+    @classmethod
     def auto(cls):
         machine = py_platform.machine()
         if machine.startswith("armv7"):
@@ -166,7 +209,11 @@ class Platform:
         )
 
     def match(self, payload: Dict[str, str]) -> bool:
-        if self.variant and self.variant != payload.get("variant"):
+        if self.variant and self.variant != (
+            # allows matching linux/arm64 images with linux/arm/v8 requests
+            payload.get("variant")
+            or self.default_variant(payload.get("architecture"))
+        ):
             return False
 
         return self.os == payload.get("os") and self.architecture == payload.get(
@@ -404,10 +451,7 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
     # image is single-platform, thus considered linux/amd64
     if "layers" in fat_manifests:
         if platform != platform.default():
-            raise ValueError(
-                f"Requested platform ({platform}) is not available "
-                f"for v1 manifest (considered {platform.default()}) for image {image}"
-            )
+            raise V1ImageNotFound(image, platform, is_v1=True)
         manifest = fat_manifests
     else:
         # multi-platform image
@@ -420,17 +464,11 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
                 Platform.from_payload(man.get("platform"))
                 for man in fat_manifests.get("manifests", [])
             ]
-            raise ValueError(
-                f"Requested platform ({platform}) is not available "
-                f"for image {image}. "
-                f"Available platforms: {', '.join([str(p) for p in platforms])}"
-            )
+            raise V2ImageNotFound(image, platform, platforms)
 
     logger.debug(f"layers_manifest={format_json(manifest)}")
     if not manifest.get("layers"):
-        raise ValueError(
-            f"Layers missing for requested platform ({platform}) for image {image}."
-        )
+        raise LayersNotFound(image, platform)
     return manifest
 
 
