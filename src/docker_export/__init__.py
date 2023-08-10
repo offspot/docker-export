@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
 import argparse
 import copy
 import gzip
 import hashlib
+import http
 import json
 import logging
 import os
@@ -15,12 +17,12 @@ import sys
 import tarfile
 import tempfile
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any
 
 import requests
 
 try:
-    import progressbar
+    import progressbar  # pyright: ignore [reportMissingTypeStubs]
 except ImportError:
     progressbar = None
 try:
@@ -28,18 +30,24 @@ try:
 except ImportError:
     humanfriendly = None
 
+REQUEST_TIMEOUT = 60
 __version__ = "0.4"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-class ImageNotFound(Exception):
+class ImageNotFoundError(Exception):
     ...
 
 
-class V2ImageNotFound(ImageNotFound):
-    def __init__(self, image, platform, platforms=None):
+class V2ImageNotFoundError(ImageNotFoundError):
+    def __init__(
+        self,
+        image: Image,
+        platform: Platform,
+        platforms: list[Platform] | None = None,
+    ):
         self.image = image
         self.platform = platform
         self.platforms = platforms or []
@@ -51,8 +59,8 @@ class V2ImageNotFound(ImageNotFound):
         )
 
 
-class V1ImageNotFound(ImageNotFound):
-    def __init__(self, image, platform):
+class V1ImageNotFoundError(ImageNotFoundError):
+    def __init__(self, image: Image, platform: Platform):
         self.image = image
         self.platform = platform
         self.platforms = []
@@ -63,8 +71,8 @@ class V1ImageNotFound(ImageNotFound):
         )
 
 
-class LayersNotFound(Exception):
-    def __init__(self, image, platform):
+class LayersNotFoundError(Exception):
+    def __init__(self, image: Image, platform: Platform):
         self.image = image
         self.platform = platform
         super().__init__(
@@ -79,44 +87,44 @@ def format_size(size: int) -> str:
     return f"{size} bytes"
 
 
-def format_json(data: Dict) -> str:
+def format_json(data: Any) -> str:
     return json.dumps(data, indent=4)
 
 
 class VisualProgressBar:
-    def __init__(self, total: int = None):
-        widgets = [
-            "[",
-            progressbar.Timer(),
-            "] ",
-            progressbar.DataSize(),
-            progressbar.Bar(),
-            progressbar.AdaptiveTransferSpeed(),
-            " (",
-            progressbar.ETA(),
-            ")",
-        ]
-        self.bar = progressbar.ProgressBar(max_value=total, widgets=widgets)
+    def __init__(self, total: int | None = None):
+        if progressbar is None:
+            widgets = []
+            self.bar = None
+        else:
+            widgets = [
+                "[",
+                progressbar.Timer(),
+                "] ",
+                progressbar.DataSize(),
+                progressbar.Bar(),
+                progressbar.AdaptiveTransferSpeed(),
+                " (",
+                progressbar.ETA(),
+                ")",
+            ]
+            self.bar = progressbar.ProgressBar(max_value=total, widgets=widgets)
         self.seen_so_far = 0
 
     def callback(self, bytes_amount: int):
         self.seen_so_far += bytes_amount
-        self.bar.update(self.seen_so_far)
+        if self.bar is not None:
+            self.bar.update(  # pyright: ignore [ reportUnknownMemberType]
+                self.seen_so_far
+            )
+        else:
+            print(f"\r{format_size(self.seen_so_far)} downloaded", end="")
 
     def finish(self):
-        self.bar.finish()
-
-
-class NoProgressBar:
-    def __init__(self, *args, **kwargs):
-        self.seen_so_far = 0
-
-    def callback(self, bytes_amount: int):
-        self.seen_so_far += bytes_amount
-        print(f"\r{format_size(self.seen_so_far)} downloaded", end="")
-
-    def finish(self):
-        print("")
+        if self.bar is not None:
+            self.bar.finish()
+        else:
+            print("")
 
 
 @dataclass
@@ -132,7 +140,7 @@ class Platform:
         return value
 
     @classmethod
-    def parse(cls, platform_str: str, **kwargs):
+    def parse(cls, platform_str: str) -> Platform:
         if platform_str == "auto":
             return cls.auto()
 
@@ -157,7 +165,7 @@ class Platform:
             raise ValueError(f"Invalid OS “{os}” from `{platform_str}`")
 
         if not variant and re.match(r"[\w\d]+v\d$", architecture):
-            architecture, variant = re.split(r"(v\d)$", architecture, 1)[:-1]
+            architecture, variant = re.split(r"(v\d)$", architecture, maxsplit=1)[:-1]
 
         if architecture not in (
             "amd64",
@@ -179,11 +187,11 @@ class Platform:
         return cls(architecture=architecture, os=os, variant=variant)
 
     @classmethod
-    def default(cls):
+    def default(cls) -> Platform:
         return cls.parse("linux/amd64")
 
     @classmethod
-    def default_variant(cls, architecture):
+    def default_variant(cls, architecture: str):
         return {"arm64": "v8", "arm32": "v7"}.get(architecture, "")
 
     @classmethod
@@ -200,18 +208,18 @@ class Platform:
         return cls.parse("linux/amd64")
 
     @classmethod
-    def from_payload(cls, payload: Dict[str, str]):
+    def from_payload(cls, payload: dict[str, str]):
         return cls(
-            architecture=payload.get("architecture"),
-            os=payload.get("os"),
-            variant=payload.get("variant"),
+            architecture=payload.get("architecture", ""),
+            os=payload.get("os", ""),
+            variant=payload.get("variant", ""),
         )
 
-    def match(self, payload: Dict[str, str]) -> bool:
+    def match(self, payload: dict[str, str]) -> bool:
         if self.variant and self.variant != (
             # allows matching linux/arm64 images with linux/arm/v8 requests
             payload.get("variant")
-            or self.default_variant(payload.get("architecture"))
+            or self.default_variant(payload.get("architecture", ""))
         ):
             return False
 
@@ -262,13 +270,11 @@ class Image:
     def parse(
         cls,
         name: str,
-        tag: Optional[str] = None,
-        digest: Optional[str] = None,
-        repository: Optional[str] = None,
-        registry: Optional[str] = None,
-        **kwargs,
+        tag: str | None = None,
+        digest: str | None = None,
+        repository: str | None = None,
+        registry: str | None = None,
     ):
-
         name_part = name.rsplit("/", 1)[-1]
 
         # do we have a digest?
@@ -293,9 +299,9 @@ class Image:
         tree = name.rsplit(name_part, 1)[0].split("/")[:-1]
         if len(tree) == 1:
             repository = tree[0]
-        elif len(tree) == 2:
+        elif len(tree) == 2:  # noqa: PLR2004
             registry, repository = tree
-        elif len(tree) > 2:
+        elif len(tree) > 2:  # noqa: PLR2004
             raise ValueError(f"Unrecognized image tree: {tree}")
 
         if not repository or repository == "_":
@@ -307,7 +313,11 @@ class Image:
         name = name_part
 
         return cls(
-            registry=registry, repository=repository, name=name, tag=tag, digest=digest
+            registry=registry,
+            repository=repository,
+            name=name,
+            tag=tag or "",
+            digest=digest or "",
         )
 
 
@@ -320,13 +330,13 @@ class RegistryAuth:
     service: str
 
     @classmethod
-    def init(cls, image):
+    def init(cls, image: Image) -> RegistryAuth:
         # default, fallback values
         url = f"https://{image.registry}/token"
         service = ""
 
-        resp = requests.get(f"https://{image.registry}/v2/")
-        if resp.status_code == 401:
+        resp = requests.get(f"https://{image.registry}/v2/", timeout=REQUEST_TIMEOUT)
+        if resp.status_code == http.HTTPStatus.UNAUTHORIZED:
             url = resp.headers["WWW-Authenticate"].split('"')[1]
             try:
                 service = resp.headers["WWW-Authenticate"].split('"')[3]
@@ -348,18 +358,19 @@ class RegistryAuth:
                 "service": self.service,
                 "scope": f"repository:{self.image}:pull",
             },
+            timeout=REQUEST_TIMEOUT,
         )
 
         self.token = resp.json().get("token")
 
     @property
-    def headers(self) -> Dict[str, str]:
+    def headers(self) -> dict[str, str]:
         if not self.token:
             self.authenticate()
         return {"Authorization": f"Bearer {self.token}"}
 
 
-def get_manifests(image, auth):
+def get_manifests(image: Image, auth: RegistryAuth):
     """get list of fat-manifests for the image"""
     resp = requests.get(
         f"https://{image.registry}/v2/{image.repository}/{image.name}"
@@ -368,25 +379,28 @@ def get_manifests(image, auth):
             **auth.headers,
             **{"Accept": "application/vnd.docker.distribution.manifest.list.v2+json"},
         ),
+        timeout=REQUEST_TIMEOUT,
     )
-    if resp.status_code == 401:
-        raise IOError(
+    if resp.status_code == http.HTTPStatus.UNAUTHORIZED:
+        raise OSError(
             f"HTTP {resp.status_code}: {resp.reason} -- "
             "This **may** indicate an incorrect image name/registry/repo/tag.\n"
             f"Check {image.url}"
         )
-    if resp.status_code == 404:
+    if resp.status_code == http.HTTPStatus.NOT_FOUND:
         raise ValueError(
             f"HTTP {resp.status_code}: {resp.reason} -- "
             f"Image name is probably incorrect.\nCheck {image.url}"
         )
-    if resp.status_code != 200:
-        raise IOError(f"HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
+    if resp.status_code != http.HTTPStatus.OK:
+        raise OSError(f"HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
 
     return resp.json()
 
 
-def get_layers_manifest_for(image, auth, reference: str = None):
+def get_layers_manifest_for(
+    image: Image, auth: RegistryAuth, reference: str | None = None
+):
     """get list of layers for the image using a specific reference"""
     reference = reference or image.reference
     resp = requests.get(
@@ -396,16 +410,17 @@ def get_layers_manifest_for(image, auth, reference: str = None):
             **auth.headers,
             **{"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
         ),
+        timeout=REQUEST_TIMEOUT,
     )
-    if resp.status_code != 200:
-        raise IOError("HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
+    if resp.status_code != http.HTTPStatus.OK:
+        raise OSError("HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
 
     return resp.json()
 
 
 def get_layers_from_v1_manifest(
-    image: Image, platform: Platform, manifest: Dict
-) -> Dict:
+    image: Image, platform: Platform, manifest: dict[str, Any]
+) -> dict[str, Any]:
     architecture = manifest.get("architecture", "amd64")
     os = manifest.get("os", "linux")
 
@@ -450,7 +465,7 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
     # image is single-platform, thus considered linux/amd64
     if "layers" in fat_manifests:
         if platform != platform.default():
-            raise V1ImageNotFound(image, platform, is_v1=True)
+            raise V1ImageNotFoundError(image, platform)
         manifest = fat_manifests
     else:
         # multi-platform image
@@ -463,15 +478,15 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
                 Platform.from_payload(man.get("platform"))
                 for man in fat_manifests.get("manifests", [])
             ]
-            raise V2ImageNotFound(image, platform, platforms)
+            raise V2ImageNotFoundError(image, platform, platforms)
 
     logger.debug(f"layers_manifest={format_json(manifest)}")
     if not manifest.get("layers"):
-        raise LayersNotFound(image, platform)
+        raise LayersNotFoundError(image, platform)
     return manifest
 
 
-def make_layer_id(parent_id: str, layer: Dict) -> str:
+def make_layer_id(parent_id: str, layer: dict[str, Any]) -> str:
     """Fake layer ID. Don't know how Docker generates it"""
     return hashlib.sha256(
         (parent_id + "\n" + layer["digest"] + "\n").encode("utf-8")
@@ -485,7 +500,11 @@ def get_layer_dir(image_dir: pathlib.Path, layer_id: str) -> pathlib.Path:
 
 
 def download_layer_blob(
-    image: Image, parent_id, layer, layer_dir: pathlib.Path, auth: RegistryAuth
+    image: Image,
+    parent_id: str,
+    layer: dict[str, Any],
+    layer_dir: pathlib.Path,
+    auth: RegistryAuth,
 ):
     layer_digest = layer["digest"]
 
@@ -500,8 +519,11 @@ def download_layer_blob(
             **{"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
         ),
         stream=True,
+        timeout=REQUEST_TIMEOUT,
     )
-    if resp.status_code != 200:  # When the layer is located at a custom URL
+    if (
+        resp.status_code != http.HTTPStatus.OK
+    ):  # When the layer is located at a custom URL
         resp = requests.get(
             layer["urls"][0],
             headers=dict(
@@ -509,9 +531,10 @@ def download_layer_blob(
                 **{"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
             ),
             stream=True,
+            timeout=REQUEST_TIMEOUT,
         )
-        if resp.status_code != 200:
-            raise IOError(
+        if resp.status_code != http.HTTPStatus.OK:
+            raise OSError(
                 f"ERROR: Cannot download layer {layer_digest[7:19]} "
                 f"[HTTP {resp.status_code}] {resp.headers['Content-Length']}"
             )
@@ -520,7 +543,7 @@ def download_layer_blob(
     total_exp = int(resp.headers["Content-Length"])
     chunk_size = 1048576
     received = 0
-    progress = VisualProgressBar(total_exp) if progressbar else NoProgressBar(total_exp)
+    progress = VisualProgressBar(total_exp)
 
     with open(layer_dir / "layer_gzip.tar", "wb") as fh:
         for chunk in resp.iter_content(chunk_size=chunk_size):
@@ -537,16 +560,19 @@ def extract_layer(layer_digest: str, layer_dir: pathlib.Path):
     logger.info(f"> [{layer_digest[7:19]}] Extracting...")  # Ugly but works everywhere
     layer_ark = layer_dir / "layer.tar"
     with open(layer_dir / "layer.tar", "wb") as fh:  # Decompress gzip response
-        unzLayer = gzip.open(layer_dir / "layer_gzip.tar", "rb")
-        shutil.copyfileobj(unzLayer, fh)
-        unzLayer.close()
+        with gzip.open(layer_dir / "layer_gzip.tar", "rb") as gzfh:
+            shutil.copyfileobj(gzfh, fh)
     layer_dir.joinpath("layer_gzip.tar").unlink()
 
     return layer_ark
 
 
 def write_layer_metadata(
-    layer_dir: pathlib.Path, layer_id: str, parent_id: str, layer: Dict, manifest: Dict
+    layer_dir: pathlib.Path,
+    layer_id: str,
+    parent_id: str,
+    layer: dict[str, Any],
+    manifest: dict[str, Any],
 ):
     logger.info(f"> [{layer['digest'][7:19]}] Adding metadata…")
 
@@ -601,11 +627,10 @@ def bundle_image(
     image: Image,
     image_dir: pathlib.Path,
     target: pathlib.Path,
-    manifest: Dict,
+    manifest: list[dict[str, Any]],
     config: bytes,
     latest_layer_id: str,
 ):
-
     logger.info("Adding Image metadata…")
     # image digest
     with open(image_dir / manifest[0]["Config"], "wb") as fh:
@@ -641,7 +666,7 @@ def export_layers(
     image_dir: pathlib.Path,
     target: pathlib.Path,
     auth: RegistryAuth,
-    manifest: Dict,
+    manifest: dict[str, Any],
 ):
     """create image from layers manifest"""
     total_size = sum([layer.get("size", 0) for layer in manifest["layers"]])
@@ -656,8 +681,9 @@ def export_layers(
     resp = requests.get(
         f"https://{image.registry}/v2/{image.fullname}/blobs/{digest}",
         headers=auth.headers,
+        timeout=REQUEST_TIMEOUT,
     )
-    if resp.status_code == 404:
+    if resp.status_code == http.HTTPStatus.NOT_FOUND:
         logger.error(
             "Unsupported manifest schema/version: digest blob not found\n\n"
             "###############\n"
@@ -668,7 +694,7 @@ def export_layers(
     resp.raise_for_status()
     config = resp.content
 
-    new_manifest = [
+    new_manifest: list[dict[str, Any]] = [
         {
             "Config": f"{digest[7:]}.json",
             "RepoTags": [f"{image.reg_fullname}:{image.tag}"],
@@ -677,6 +703,7 @@ def export_layers(
     ]
 
     parent_id = ""
+    layer_id = "unknown"
     for layer in manifest["layers"]:
         layer_id = make_layer_id(parent_id=parent_id, layer=layer)
         layer_dir = get_layer_dir(image_dir=image_dir, layer_id=layer_id)
@@ -711,7 +738,7 @@ def export(
     image: Image,
     platform: Platform,
     to: pathlib.Path,
-    build_dir: Optional[pathlib.Path] = None,
+    build_dir: pathlib.Path | None = None,
 ):
     """export image into `to` tar archive
 
@@ -731,9 +758,8 @@ def export(
     manifest = get_layers_manifest(image=image, platform=platform, auth=auth)
 
     with tempfile.TemporaryDirectory(
-        suffix=".tmp", prefix=to.stem, dir=build_dir, ignore_cleanup_errors=True
+        suffix=".tmp", prefix=to.stem, dir=build_dir
     ) as image_dir:
-
         export_layers(
             image=image,
             image_dir=pathlib.Path(image_dir),
@@ -833,7 +859,7 @@ See https://docs.docker.com/desktop/multi-arch/ for platforms list""",
         logger.error(str(exc))
         if args.get("debug"):
             logger.exception(exc)
-        raise SystemExit(1)
+        raise SystemExit(1) from exc
 
 
 if __name__ == "__main__":
