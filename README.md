@@ -1,8 +1,10 @@
 # docker-export
 
-[![PyPI version shields.io](https://img.shields.io/pypi/v/docker_export)](https://pypi.org/project/docker_export/)
 [![CodeFactor](https://www.codefactor.io/repository/github/offspot/docker-export/badge)](https://www.codefactor.io/repository/github/offspot/docker-export)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![codecov](https://codecov.io/gh/offspot/docker-export/branch/main/graph/badge.svg)](https://codecov.io/gh/offspot/docker-export)
+[![PyPI version shields.io](https://img.shields.io/pypi/v/docker-export.svg)](https://pypi.org/project/docker-export/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/docker-export.svg)](https://pypi.org/project/docker-export)
 
 Export Docker Images (**v2 manifests only**) to a single `.tar`, without `docker`;
 Using Python and the registry's API.
