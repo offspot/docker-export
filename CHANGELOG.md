@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Image.exists()`/`image_exists()` function to check registry for an image+platform
+- `Image.get_digest()`/`get_image_digest()` function to retrieve unique image+platform digest
+
 ### Changed
 
 - Fixed Python 3.8 and 3.9 usage (was using 3.10+ specific feature)

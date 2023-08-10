@@ -192,7 +192,7 @@ class Platform:
 
     @classmethod
     def default_variant(cls, architecture: str):
-        return {"arm64": "v8", "arm32": "v7"}.get(architecture, "")
+        return {"arm64": "v8", "arm": "v7"}.get(architecture, "")
 
     @classmethod
     def auto(cls):
@@ -319,6 +319,12 @@ class Image:
             tag=tag or "",
             digest=digest or "",
         )
+
+    def exists(self, platform: Platform) -> bool:
+        return image_exists(image=self, platform=platform)
+
+    def get_digest(self, platform: Platform) -> str:
+        return get_image_digest(image=self, platform=platform)
 
 
 @dataclass
@@ -734,6 +740,57 @@ def export_layers(
     logger.info(f"Docker image exported: {target}")
 
 
+def image_exists(image: Image, platform: Platform) -> bool:
+    """whether image exists on the registry"""
+    auth = RegistryAuth.init(image)
+    auth.authenticate()
+    try:
+        get_layers_manifest(image=image, platform=platform, auth=auth)
+    except Exception as exc:
+        logger.exception(exc)
+        return False
+    return True
+
+
+def get_image_digest(image: Image, platform: Platform) -> str:
+    """Current digest for an Image
+
+    Value of the current in-registry image for our platform.
+
+    For v1 manifests and single-arch images, this is not the same value
+    as in the registry's UI.
+    Not much of a problem for us as images to be used here should be v2/multi
+    and what's return is consistent and will be used only for comparison
+    to check if a tag has been updated or not"""
+
+    auth = RegistryAuth.init(image)
+    auth.authenticate()
+    fat_manifests = get_manifests(image, auth)
+
+    if fat_manifests["schemaVersion"] == 1:
+        return get_layers_from_v1_manifest(
+            image=image, platform=platform, manifest=fat_manifests
+        )["config"]["digest"]
+
+    # image is single-platform, thus considered linux/amd64
+    if "layers" in fat_manifests:
+        if platform != platform.default():
+            raise V1ImageNotFoundError(image=image, platform=platform)
+        return fat_manifests["config"]["digest"]
+    else:
+        # multi-platform image
+        platforms: list[Platform] = []
+        for arch_manifest in fat_manifests.get("manifests", []):
+            if not arch_manifest.get("platform"):
+                continue
+            manifest_platform = Platform.from_payload(arch_manifest["platform"])
+            if platform == manifest_platform:
+                return arch_manifest["digest"]
+            platforms.append(manifest_platform)
+
+    raise V2ImageNotFoundError(image=image, platform=platform, platforms=platforms)
+
+
 def export(
     image: Image,
     platform: Platform,
@@ -840,24 +897,27 @@ See https://docs.docker.com/desktop/multi-arch/ for platforms list""",
     )
 
     args = dict(parser.parse_args()._get_kwargs())
-    if args.get("debug"):
+    debug = args.pop("debug", False)
+    output = args.pop("output", "")
+    build_dir = args.pop("output", "")
+    platform = args.pop("platform", "auto")
+    if debug:
         logger.setLevel(logging.DEBUG)
+
     try:
-        platform = Platform.parse(args["platform"])
+        platform = Platform.parse(platform)
         image = Image.parse(**args)
-        dest = pathlib.Path(args["output"]).expanduser().resolve()
+        dest = pathlib.Path(output).expanduser().resolve()
         if not dest.suffix == ".tar":
             dest = dest.joinpath(f"{image.fs_name}.tar")
         build_dir = (
-            pathlib.Path(args["build_dir"]).expanduser().resolve()
-            if args.get("build_dir")
-            else None
+            pathlib.Path(build_dir).expanduser().resolve() if build_dir else None
         )
         export(image=image, platform=platform, to=dest, build_dir=build_dir)
         sys.exit(0)
     except Exception as exc:
         logger.error(str(exc))
-        if args.get("debug"):
+        if debug:
             logger.exception(exc)
         raise SystemExit(1) from exc
 

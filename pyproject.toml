@@ -101,7 +101,7 @@ fix-ruff = "inv fix-ruff --args '{args}'"
 fixall = "inv fixall --args '{args}'"
 
 [tool.hatch.envs.check]
-features = ["scripts", "check", "visual"]
+features = ["scripts", "check", "test", "visual"]
 
 [tool.hatch.envs.check.scripts]
 pyright = "inv check-pyright --args '{args}'"
