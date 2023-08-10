@@ -139,13 +139,12 @@ class Platform:
         architecture = os = variant = ""
         parts = platform_str.split("/", 2)
 
-        match len(parts):
-            case 3:
-                os, architecture, variant = parts
-            case 2:
-                os, architecture = parts
-            case 1:
-                architecture = parts[0]
+        if len(parts) == 3:  # noqa: PLR2004
+            os, architecture, variant = parts
+        elif len(parts) == 2:  # noqa: PLR2004
+            os, architecture = parts
+        elif len(parts) == 1:
+            architecture = parts[0]
 
         if not os:
             os = "linux"
