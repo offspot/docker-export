@@ -21,7 +21,7 @@ classifiers = [
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
 ]
 dependencies = [
-    "requests >=2 , <3",
+    "requests>=2,<3",
 ]
 dynamic = ["version"]
 
@@ -50,8 +50,8 @@ dev = [
   "docker-export[all]",
 ]
 visual = [
-  "humanfriendly >= 8.0",
-  "progressbar2 >= 4.0"
+  "humanfriendly>=8.0",
+  "progressbar2>=4.0"
 ]
 
 [project.urls]
