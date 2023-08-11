@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from docker_export import Platform
@@ -54,32 +52,19 @@ def test_from_payload():
 
 
 @pytest.mark.parametrize(
-    "value_a, payload, should_match",
+    "value_a, value_b, should_match",
     [
-        ("linux/amd64", {"architecture": "linux", "os": "amd64"}, False),
-        ("linux/amd64", {"architecture": "amd64", "os": "linux"}, True),
-        (
-            "linux/amd64",
-            {"architecture": "amd64", "os": "linux", "variant": "v3"},
-            True,
-        ),
-        ("linux/armv6", {"architecture": "arm", "os": "linux", "variant": "v6"}, True),
-        ("linux/armv6", {"architecture": "arm", "os": "linux"}, False),
-        ("linux/armv6", {"architecture": "arm", "os": "linux", "variant": "v7"}, False),
-        ("linux/armv6", {"architecture": "arm", "os": "linux", "variant": "v8"}, False),
-        ("linux/armv7", {"architecture": "arm", "os": "linux"}, True),
-        ("linux/armv7", {"architecture": "arm", "os": "linux", "variant": "v7"}, True),
-        (
-            "linux/arm64/v8",
-            {"architecture": "arm64", "os": "linux", "variant": "v8"},
-            True,
-        ),
-        (
-            "linux/arm64",
-            {"architecture": "arm64", "os": "linux", "variant": "v8"},
-            True,
-        ),
+        ("linux/amd64", "linux/amd64", True),
+        ("linux/amd64", "linux/amd64/v3", False),
+        ("linux/armv6", "linux/arm", False),
+        ("linux/armv7", "linux/arm", True),
+        ("linux/armv6", "linux/arm/v6", True),
+        ("linux/armv6", "linux/arm/v7", False),
+        ("linux/armv6", "linux/arm/v8", False),
+        ("linux/armv7", "linux/arm/v7", True),
+        ("linux/arm64/v8", "linux/arm64/v8", True),
+        ("linux/arm64", "linux/arm64/v8", True),
     ],
 )
-def test_match(*, value_a: str, payload: dict[str, Any], should_match: bool):
-    assert Platform.parse(value_a).match(payload) is should_match
+def test_match(*, value_a: str, value_b: str, should_match: bool):
+    assert (Platform.parse(value_a) == Platform.parse(value_b)) is should_match

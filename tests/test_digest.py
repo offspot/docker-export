@@ -35,6 +35,11 @@ kiwix_tools: str = "ghcr.io/kiwix/kiwix-tools"
         ),
         (
             f"{kiwix_tools}:3.5.0-2",
+            "linux/arm64/v8",
+            "sha256:f7d859179210c4407447e4e37e401cefc831dfe3e686b66988a225417db884c8",
+        ),
+        (
+            f"{kiwix_tools}:3.5.0-2",
             "linux/armv7",
             "sha256:8251a47204d613ae3635815d0dc80fb9a5cf4c4cb55d4142d7bad666783a19ba",
         ),

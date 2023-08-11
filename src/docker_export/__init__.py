@@ -140,6 +140,14 @@ class Platform:
             value += f"/{self.variant}"
         return value
 
+    def __eq__(self, __value: object) -> bool:
+        if not isinstance(__value, Platform):
+            return False
+        if self.os != __value.os or self.architecture != __value.architecture:
+            return False
+        default_variant: str = self.default_variant(self.architecture)
+        return (self.variant or default_variant) == (__value.variant or default_variant)
+
     @classmethod
     def parse(cls, platform_str: str) -> Platform:
         if platform_str == "auto":
@@ -161,6 +169,8 @@ class Platform:
             architecture = "amd64"
         if architecture == "arm32":
             architecture = "arm"
+        if architecture == "i386":
+            architecture = "386"
 
         if os not in ("linux", "windows"):
             raise ValueError(f"Invalid OS “{os}” from `{platform_str}`")
@@ -179,11 +189,6 @@ class Platform:
             "s390x",
         ):
             raise ValueError(f"Invalid arch “{architecture}” from `{platform_str}`")
-
-        if architecture == "arm" and not variant:
-            raise ValueError(
-                f"Missing variant for arch “{architecture}” from `{platform_str}`"
-            )
 
         return cls(architecture=architecture, os=os, variant=variant)
 
@@ -204,7 +209,7 @@ class Platform:
             return cls.parse("linux/arm64/v8")
         elif machine.startswith("arm"):
             return cls.parse("linux/arm/v6")
-        elif machine.startswith("i686") or machine.startswith("i386"):
+        elif re.match(r"^i(3|5|6)86", machine):
             return cls.parse("linux/i386")
         return cls.parse("linux/amd64")
 
@@ -214,18 +219,6 @@ class Platform:
             architecture=payload.get("architecture", ""),
             os=payload.get("os", ""),
             variant=payload.get("variant", ""),
-        )
-
-    def match(self, payload: dict[str, str]) -> bool:
-        if self.variant and self.variant != (
-            # allows matching linux/arm64 images with linux/arm/v8 requests
-            payload.get("variant")
-            or self.default_variant(payload.get("architecture", ""))
-        ):
-            return False
-
-        return self.os == payload.get("os") and self.architecture == payload.get(
-            "architecture"
         )
 
 
@@ -431,7 +424,7 @@ def get_layers_from_v1_manifest(
     architecture = manifest.get("architecture", "amd64")
     os = manifest.get("os", "linux")
 
-    if not platform.match({"architecture": architecture, "os": os}):
+    if platform != Platform(architecture=architecture, os=os, variant=""):
         raise ValueError(
             f"Requested platform ({platform}) is not available "
             f"for single-platform image {image}"
@@ -476,15 +469,16 @@ def get_layers_manifest(image: Image, platform: Platform, auth: RegistryAuth):
         manifest = fat_manifests
     else:
         # multi-platform image
+        platforms: list[Platform] = []
         for arch_manifest in fat_manifests.get("manifests", []):
-            if platform.match(arch_manifest.get("platform", {})):
+            if not arch_manifest.get("platform"):
+                continue
+            manifest_platform = Platform.from_payload(arch_manifest["platform"])
+            if platform == manifest_platform:
                 manifest = get_layers_manifest_for(image, auth, arch_manifest["digest"])
+            platforms.append(manifest_platform)
 
         if not manifest:
-            platforms = [
-                Platform.from_payload(man.get("platform"))
-                for man in fat_manifests.get("manifests", [])
-            ]
             raise V2ImageNotFoundError(image, platform, platforms)
 
     logger.debug(f"layers_manifest={format_json(manifest)}")
@@ -778,16 +772,15 @@ def get_image_digest(image: Image, platform: Platform) -> str:
         if platform != platform.default():
             raise V1ImageNotFoundError(image=image, platform=platform)
         return fat_manifests["config"]["digest"]
-    else:
-        # multi-platform image
-        platforms: list[Platform] = []
-        for arch_manifest in fat_manifests.get("manifests", []):
-            if not arch_manifest.get("platform"):
-                continue
-            manifest_platform = Platform.from_payload(arch_manifest["platform"])
-            if platform == manifest_platform:
-                return arch_manifest["digest"]
-            platforms.append(manifest_platform)
+    # multi-platform image
+    platforms: list[Platform] = []
+    for arch_manifest in fat_manifests.get("manifests", []):
+        if not arch_manifest.get("platform"):
+            continue
+        manifest_platform = Platform.from_payload(arch_manifest["platform"])
+        if platform == manifest_platform:
+            return arch_manifest["digest"]
+        platforms.append(manifest_platform)
 
     raise V2ImageNotFoundError(image=image, platform=platform, platforms=platforms)
 
