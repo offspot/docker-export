@@ -12,9 +12,9 @@ kiwix_tools: str = "ghcr.io/kiwix/kiwix-tools"
     "image_name, platform_name, expected_digest",
     [
         (
-            "matomo:4.15.1-fpm-alpine",
+            "matomo:4.4.0-fpm-alpine",
             "linux/s390x",
-            "sha256:e85b362869067e99e8343fb3a7fed38e23f3aa681151bb8716de29ae3e5a4ae2",
+            "sha256:d232f018fafe0686acfabae51ddc40a315c557bcd2401ee36e54b2b018d049de",
         ),
         (
             "helloysd/caddy:0.10.11",
