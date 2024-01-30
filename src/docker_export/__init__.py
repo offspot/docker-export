@@ -373,6 +373,11 @@ class RegistryAuth:
         return {"Authorization": f"Bearer {self.token}"}
 
 
+def get_export_filename(image: Image, platform: Platform) -> str:
+    """Filesystem-safe filename to export an image for a platform"""
+    return sanitize_filename(f"{image.fs_name}_{platform}.tar")
+
+
 def get_manifests(image: Image, auth: RegistryAuth):
     """get list of fat-manifests for the image"""
     resp = requests.get(
@@ -906,7 +911,7 @@ See https://docs.docker.com/desktop/multi-arch/ for platforms list""",
         image = Image.parse(**args)
         dest = pathlib.Path(output).expanduser().resolve()
         if not dest.suffix == ".tar":
-            dest = dest.joinpath(sanitize_filename(f"{image.fs_name}_{platform}.tar"))
+            dest = dest.joinpath(get_export_filename(image=image, platform=platform))
         build_dir = (
             pathlib.Path(build_dir).expanduser().resolve() if build_dir else None
         )

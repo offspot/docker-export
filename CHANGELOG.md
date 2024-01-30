@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2024-01-30
 
+### Added
+
+- `get_export_filename(image, platform)` for an fs-safe filename
+
 ### Changed
 
 - `fs_name` now includes image reference and is filesystem safe for all OS.

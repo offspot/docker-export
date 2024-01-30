@@ -7,7 +7,7 @@ import subprocess
 import py  # pyright: ignore [reportMissingTypeStubs]
 import pytest
 
-from docker_export import Image, Platform, export
+from docker_export import Image, Platform, export, get_export_filename
 
 
 @pytest.fixture(scope="session")
@@ -22,7 +22,7 @@ def platform_name() -> str:
 
 @pytest.fixture(scope="session")
 def expected_filepath() -> pathlib.Path:
-    return pathlib.Path("ghcr.io_offspot_base-httpd.tar")
+    return pathlib.Path("ghcr.io_offspot_base-httpd_1.0_linuxarm64.tar")
 
 
 @pytest.fixture(scope="session")
@@ -42,7 +42,9 @@ def test_export(
     export(
         image=Image.parse(image_name),
         platform=Platform.parse(platform_name),
-        to=expected_filepath,
+        to=pathlib.Path(
+            get_export_filename(Image.parse(image_name), Platform.parse(platform_name))
+        ),
     )
     assert expected_filepath.exists()
     assert expected_filepath.stat().st_size == expected_filesize
@@ -65,7 +67,8 @@ def test_cli(
             platform_name,
             image_name,
             ".",
-        ]
+        ],
+        check=False,
     )
     assert ps.returncode == 0
     assert expected_filepath.exists()
