@@ -47,8 +47,7 @@ def test_parse_error(value: str):
         Platform.parse(value)
 
 
-def test_from_payload():
-    ...
+def test_from_payload(): ...
 
 
 @pytest.mark.parametrize(

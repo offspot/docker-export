@@ -39,8 +39,7 @@ logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-class ImageNotFoundError(Exception):
-    ...
+class ImageNotFoundError(Exception): ...
 
 
 class V2ImageNotFoundError(ImageNotFoundError):
