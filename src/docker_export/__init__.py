@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import requests
+from pathvalidate import sanitize_filename
 
 try:
     import progressbar  # pyright: ignore [reportMissingTypeStubs]
@@ -32,7 +33,7 @@ except ImportError:
 
 REQUEST_TIMEOUT = 60
 
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -230,30 +231,32 @@ class Image:
     tag: str
     digest: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         value = f"{self.registry}/{self.repository}/{self.name}:{self.tag}"
         if self.digest:
             value += f"@{self.digest}"
         return value
 
     @property
-    def fullname(self):
+    def fullname(self) -> str:
         return f"{self.repository}/{self.name}"
 
     @property
-    def reg_fullname(self):
+    def reg_fullname(self) -> str:
         return f"{self.registry}/{self.fullname}"
 
     @property
-    def fs_name(self):
-        return "_".join(pathlib.Path(self.reg_fullname).parts)
+    def fs_name(self) -> str:
+        return sanitize_filename(
+            "_".join(pathlib.Path(self.reg_fullname).parts) + f"_{self.reference}"
+        )
 
     @property
     def reference(self):
         return self.digest or self.tag
 
     @property
-    def url(self):
+    def url(self) -> str:
         domain = (
             "hub.docker.com" if self.registry == "index.docker.io" else self.registry
         )
@@ -903,7 +906,7 @@ See https://docs.docker.com/desktop/multi-arch/ for platforms list""",
         image = Image.parse(**args)
         dest = pathlib.Path(output).expanduser().resolve()
         if not dest.suffix == ".tar":
-            dest = dest.joinpath(f"{image.fs_name}.tar")
+            dest = dest.joinpath(sanitize_filename(f"{image.fs_name}_{platform}.tar"))
         build_dir = (
             pathlib.Path(build_dir).expanduser().resolve() if build_dir else None
         )
