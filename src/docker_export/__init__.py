@@ -27,7 +27,7 @@ try:
 except ImportError:
     progressbar = None
 try:
-    import humanfriendly
+    import humanfriendly  # pyright: ignore [reportMissingTypeStubs]
 except ImportError:
     humanfriendly = None
 
@@ -128,8 +128,8 @@ class VisualProgressBar:
             print("")
 
 
-@dataclass
-class Platform:
+@dataclass(frozen=True)
+class Platform:  # noqa: PLW1641
     architecture: str
     os: str
     variant: str
