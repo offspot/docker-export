@@ -25,6 +25,16 @@ kiwix_tools: str = "ghcr.io/kiwix/kiwix-tools"
             "sha256:148e55d6f2c3fa74bdba8f2b6870677cfcb268e5a9bebc9e5135a026f502f447",
         ),
         (
+            "ghcr.io/offspot/kiwix-serve:3.8.2",
+            "linux/arm64",
+            "sha256:eb186010ca6318da285db02383d2bb4aef45034faead4eb8a78fcde758d919c3",
+        ),
+        (
+            "ghcr.io/offspot/kiwix-serve:3.8.1",
+            "linux/amd64",
+            "sha256:c7e75fd985a93aedcc4582751f23d64bcf4274294fff63c3b7a0ba32bc3d103f",
+        ),
+        (
             f"{kiwix_tools}:3.5.0-2",
             "linux/amd64",
             "sha256:a608b4e759efa9e4bba8818dff61729bb1ad988457b4a8e4f7d356fece8bc9a1",
