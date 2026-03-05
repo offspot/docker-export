@@ -260,7 +260,7 @@ class Image:
             "hub.docker.com" if self.registry == "index.docker.io" else self.registry
         )
         prefix = "r/" if self.registry == "index.docker.io" else ""
-        return f"https://{domain}/{prefix}/{self.fullname}"
+        return f"https://{domain}/{prefix}{'/' if prefix else ''}{self.fullname}"
 
     @classmethod
     def parse(
