@@ -19,9 +19,20 @@ kiwix_tools: str = "ghcr.io/kiwix/kiwix-tools"
         (
             "helloysd/caddy:0.10.11",
             "linux/amd64",
-            "672342e30b241ae37f442b0afdd6e744f776af3bd602c4bceaa8dcf2547841bd",
-            # different from hub (v1 manifest)
-            # "sha256:8a7b91584f5d0ee6211249d05ec51f026b763d3e1a87885e7d0d6968c42ad6b1",
+            # on docker hub digest is shown as
+            # "sha256:8a7b91584f5d0ee6211249d05ec51f026b763d3e1a87885e7d0d6968c42ad6b1"
+            # which is the Docker-Content-Digest
+            "sha256:148e55d6f2c3fa74bdba8f2b6870677cfcb268e5a9bebc9e5135a026f502f447",
+        ),
+        (
+            "ghcr.io/offspot/kiwix-serve:3.8.2",
+            "linux/arm64",
+            "sha256:eb186010ca6318da285db02383d2bb4aef45034faead4eb8a78fcde758d919c3",
+        ),
+        (
+            "ghcr.io/offspot/kiwix-serve:3.8.1",
+            "linux/amd64",
+            "sha256:c7e75fd985a93aedcc4582751f23d64bcf4274294fff63c3b7a0ba32bc3d103f",
         ),
         (
             f"{kiwix_tools}:3.5.0-2",

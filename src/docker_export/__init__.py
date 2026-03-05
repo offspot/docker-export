@@ -27,7 +27,7 @@ try:
 except ImportError:
     progressbar = None
 try:
-    import humanfriendly
+    import humanfriendly  # pyright: ignore [reportMissingTypeStubs]
 except ImportError:
     humanfriendly = None
 
@@ -37,6 +37,15 @@ __version__ = "1.1.0"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+CT_DOCKER_MANIFEST_LIST = "application/vnd.docker.distribution.manifest.list.v2+json"
+CT_DOCKER_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
+CT_OCI_INDEXES = "application/vnd.oci.image.index.v1+json"
+CT_OCI_MANIFEST = "application/vnd.oci.image.manifest.v1+json"
+CT_OCI_IMAGE_CONFIG = "application/vnd.oci.image.config.v1+json"
+CT_OCI_EMPTY = "application/vnd.oci.image.config.v1+json"
+CT_OCI_LAYERS = (
+    "application/vnd.oci.image.layer.v1.tar,application/vnd.oci.image.layer.v1.tar+gzip"
+)
 
 
 class ImageNotFoundError(Exception): ...
@@ -128,8 +137,8 @@ class VisualProgressBar:
             print("")
 
 
-@dataclass
-class Platform:
+@dataclass(frozen=True)
+class Platform:  # noqa: PLW1641
     architecture: str
     os: str
     variant: str
@@ -260,7 +269,7 @@ class Image:
             "hub.docker.com" if self.registry == "index.docker.io" else self.registry
         )
         prefix = "r/" if self.registry == "index.docker.io" else ""
-        return f"https://{domain}/{prefix}/{self.fullname}"
+        return f"https://{domain}/{prefix}{'/' if prefix else ''}{self.fullname}"
 
     @classmethod
     def parse(
@@ -384,7 +393,7 @@ def get_manifests(image: Image, auth: RegistryAuth):
         f"/manifests/{image.reference}",
         headers=dict(
             **auth.headers,
-            **{"Accept": "application/vnd.docker.distribution.manifest.list.v2+json"},
+            **{"Accept": ", ".join([CT_DOCKER_MANIFEST_LIST, CT_OCI_INDEXES])},
         ),
         timeout=REQUEST_TIMEOUT,
     )
@@ -415,13 +424,12 @@ def get_layers_manifest_for(
         f"/manifests/{reference}",
         headers=dict(
             **auth.headers,
-            **{"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+            **{"Accept": ", ".join([CT_DOCKER_MANIFEST, CT_OCI_MANIFEST])},
         ),
         timeout=REQUEST_TIMEOUT,
     )
     if resp.status_code != http.HTTPStatus.OK:
-        raise OSError("HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
-
+        raise OSError(f"HTTP {resp.status_code}: {resp.reason} -- {resp.text}")
     return resp.json()
 
 
@@ -438,7 +446,7 @@ def get_layers_from_v1_manifest(
         )
 
     return {
-        "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+        "mediaType": CT_DOCKER_MANIFEST,
         "schemaVersion": 2,
         "config": {
             "mediaType": "application/vnd.docker.container.image.v1+json",
@@ -447,7 +455,7 @@ def get_layers_from_v1_manifest(
         },
         "layers": [
             {
-                "mediaType": "application/vnd.docker.distribution.manifest.v2+json",
+                "mediaType": CT_DOCKER_MANIFEST,
                 "digest": layer["blobSum"],
                 # "size": None,
                 "platform": {"architecture": architecture, "os": os},
@@ -524,7 +532,7 @@ def download_layer_blob(
         f"https://{image.registry}/v2/{image.fullname}/blobs/{layer_digest}",
         headers=dict(
             **auth.headers,
-            **{"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+            **{"Accept": CT_DOCKER_MANIFEST},
         ),
         stream=True,
         timeout=REQUEST_TIMEOUT,
@@ -536,7 +544,7 @@ def download_layer_blob(
             layer["urls"][0],
             headers=dict(
                 **auth.headers,
-                **{"Accept": "application/vnd.docker.distribution.manifest.v2+json"},
+                **{"Accept": CT_DOCKER_MANIFEST},
             ),
             stream=True,
             timeout=REQUEST_TIMEOUT,

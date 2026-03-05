@@ -10,15 +10,15 @@ jobs:
   run-tests:
     strategy:
       matrix:
-        os: [ubuntu-22.04]
-        python: ["3.8", "3.9", "3.10", "3.11"]
+        os: [ubuntu-24.04]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
 
       - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
           architecture: x64
@@ -32,18 +32,18 @@ jobs:
         run: inv coverage --args "-vvv"
 
       - name: Upload coverage report to codecov
-        if: matrix.python == '3.11'
+        if: matrix.python == '3.10'
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   build_python:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
           architecture: x64
