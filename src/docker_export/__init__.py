@@ -33,7 +33,7 @@ except ImportError:
 
 REQUEST_TIMEOUT = 60
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger("docker-export")
 logging.getLogger("urllib3").setLevel(logging.WARNING)
